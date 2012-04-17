@@ -34,6 +34,7 @@
 #include <QPainter>
 #include <QStyleOptionGraphicsItem>
 
+#include <KWindowSystem>
 #include <KDirModel>
 #include <KGlobalSettings>
 #include <KIcon>
@@ -59,6 +60,7 @@
 #include <Plasma/PaintUtils>
 #include <Plasma/Theme>
 #include <Plasma/ToolTipManager>
+#include <Plasma/WindowEffects>
 
 
 IconView::IconView(QGraphicsWidget *parent)
@@ -2480,6 +2482,18 @@ void IconView::changeEvent(QEvent *event)
     }
 }
 
+bool IconView::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::Move) {
+        QWidget *window = qobject_cast<QWidget*>(watched);
+        if (window && QLatin1String("QShapedPixmapWidget") == window->metaObject()->className()) {
+            window->setAttribute(Qt::WA_TranslucentBackground);
+            window->clearMask();
+            Plasma::WindowEffects::overrideShadow(window->effectiveWinId(), true);
+        }
+    }
+    return false;
+}
+
 // pos is the position where the mouse was clicked in the applet.
 // widget is the widget that sent the mouse event that triggered the drag.
 void IconView::startDrag(const QPointF &pos, QWidget *widget)
@@ -2498,20 +2512,18 @@ void IconView::startDrag(const QPointF &pos, QWidget *widget)
     QStyleOptionViewItemV4 option = viewOptions();
     // ### We can't draw the items as selected or hovered since Qt doesn't
     //     use an ARGB window for the drag pixmap.
-    //option.state |= QStyle::State_Selected;
-    option.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver);
+    option.state |= QStyle::State_Selected;
+    //option.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver);
 
     QPainter p(&pixmap);
     foreach (const QModelIndex &index, indexes)
     {
         option.rect = visualRect(index).translated(-boundingRect.topLeft());
-#if 0
         // ### Reenable this code when Qt uses an ARGB window for the drag pixmap
         if (index == m_hoveredIndex)
             option.state |= QStyle::State_MouseOver;
         else
             option.state &= ~QStyle::State_MouseOver;
-#endif
         paintItem(&p, option, index);
     }
     p.end();
@@ -2526,11 +2538,15 @@ void IconView::startDrag(const QPointF &pos, QWidget *widget)
     m_hoveredIndex = QModelIndex();
     m_dragInProgress = true;
 
+    if (KWindowSystem::compositingActive()) {
+        qApp->installEventFilter(this);
+    }
     QDrag *drag = new QDrag(widget);
     drag->setMimeData(m_model->mimeData(indexes));
     drag->setPixmap(pixmap);
     drag->setHotSpot((pos - boundingRect.topLeft()).toPoint());
     drag->exec(m_model->supportedDragActions());
+    qApp->removeEventFilter(this);
 
     m_dragInProgress = false;
 

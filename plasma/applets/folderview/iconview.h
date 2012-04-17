@@ -74,6 +74,8 @@ public:
     IconView(QGraphicsWidget *parent);
     ~IconView();
 
+    bool eventFilter(QObject*, QEvent*);
+
     void setModel(QAbstractItemModel *model);
 
     void setGridSize(const QSize &gridSize);
